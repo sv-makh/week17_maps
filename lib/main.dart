@@ -4,7 +4,6 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:location/location.dart';
-import 'package:flutter_polyline_points/flutter_polyline_points.dart';
 
 void main() {
   runApp(const MyApp());
@@ -17,9 +16,9 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Map page',
-      /*theme: ThemeData(
+      theme: ThemeData(
         primarySwatch: Colors.blue,
-      ),*/
+      ),
       home: const MapPage()
     );
   }
@@ -42,6 +41,7 @@ class _MapPageState extends State<MapPage> {
     _mapController = mapController;
   }
 
+  //включена ли геолокация
   _checkLocationPermission() async {
     bool locationServiceEnabled = await location.serviceEnabled();
     if (!locationServiceEnabled) {
@@ -63,6 +63,8 @@ class _MapPageState extends State<MapPage> {
     _mapController.moveCamera(CameraUpdate.newLatLng(LatLng(initLocationData.latitude!, initLocationData.longitude!)));
   }
 
+  //координаты центра видимой области карты
+  //здесь находится фиксированный указатель
   Future<LatLng> getCenter() async {
     final GoogleMapController controller = await _controller.future;
     LatLngBounds visibleRegion = await controller.getVisibleRegion();
@@ -73,6 +75,7 @@ class _MapPageState extends State<MapPage> {
     return centerLatLng;
   }
 
+  //передвижение карты к заданной позиции
   Future<void> _goToLatLng(LatLng latLng) async {
     final GoogleMapController controller = await _controller.future;
     controller.animateCamera(CameraUpdate.newCameraPosition(CameraPosition(
@@ -81,36 +84,43 @@ class _MapPageState extends State<MapPage> {
     )));
   }
 
+  //получение текущей позиции
   Future<LatLng> _getLocationData() async {
     LocationData locationData = await location.getLocation();
     return LatLng(locationData.latitude!, locationData.longitude!);
   }
 
+  //маркеры и линии, которые будут показаны на карте
   Set<Marker> markers = {};
   Set<Polyline> polyline = {};
 
+  //действия по кнопке "Проложить"
   void _addMarker() async {
     _reset();
 
-    //LocationData locationData = await location.getLocation();
+    //получить текущую позицию
     LatLng currentLocation = await _getLocationData();
 
+    //добавить на неё красный маркер
     markers.add(Marker(
       markerId: const MarkerId("current location"),
       infoWindow: const InfoWindow(title: "current location"),
       icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
-      position: LatLng(currentLocation.latitude, currentLocation.longitude),//currentLocation,
+      position: currentLocation,//currentLocation,
     ));
+
+    //получить позицию центра карты (местонаходждение фиксированного указателя)
     LatLng pointerLocation = await getCenter();
 
+    //добавить на неё зелёный маркер
     markers.add(Marker(
-      markerId: const MarkerId("current location"),
-      infoWindow: const InfoWindow(title: "current location"),
+      markerId: const MarkerId("pointer location"),
+      infoWindow: const InfoWindow(title: "pointer location"),
       icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
       position: pointerLocation,
     ));
 
-    //polyline.removeWhere((element) => element.polylineId.value == "polyline");
+    //провести между двумя маркерами линию
     polyline.add(Polyline(
       polylineId: const PolylineId("polyline"),
       color: Colors.indigoAccent,
@@ -118,9 +128,15 @@ class _MapPageState extends State<MapPage> {
       points: markers.map((marker) => marker.position).toList(),
     ));
 
-    double centerLat = (currentLocation.latitude + pointerLocation.latitude) / 2;
-    double centerLon = (currentLocation.longitude + pointerLocation.longitude) / 2;
+    //координаты центра линии между маркерами
+    /*double centerLat = (currentLocation.latitude + pointerLocation.latitude) / 2;
+    double centerLon = (currentLocation.longitude + pointerLocation.longitude) / 2;*/
 
+    //передвижение карты на центр линии
+    //_goToLatLng(LatLng(centerLat, centerLon));
+
+    //расчёт координат противоположных углов (нижнего левого и верхнего правого) прямоугольника,
+    //диагональ которого - линия между маркерами
     final LatLng southwest = LatLng(
       min(currentLocation.latitude, pointerLocation.latitude),
       min(currentLocation.longitude, pointerLocation.longitude),
@@ -133,13 +149,14 @@ class _MapPageState extends State<MapPage> {
       southwest: southwest,
       northeast: northeast,
     );
-
-    //_goToLatLng(LatLng(centerLat, centerLon));
+    //передвижение карты и изменение масштаба
+    //фиксированный указатель автоматически оказывается в центре
     await _mapController.animateCamera(
-      CameraUpdate.newLatLngBounds(bounds, 50),
+      CameraUpdate.newLatLngBounds(bounds, 100),
     );
 
     setState(() {});
+
   }
 
   void _reset() {
@@ -180,8 +197,8 @@ class _MapPageState extends State<MapPage> {
         onMapCreated: _onMapCreated,
         markers: markers,
         polylines: polyline,
-        //onTap: _addMarker,
         ),
+        //фиксированный указатель, находится над картой посередине
         const Icon(
           Icons.accessibility_new,
           color: Colors.purpleAccent,
@@ -207,14 +224,6 @@ class _MapPageState extends State<MapPage> {
         label: const Text("Проложить"),
       )
     ])
-    );
-  }
-  
-  Widget _centerPointer(BuildContext context) {
-    return Icon(
-      Icons.accessibility_new,
-      color: Colors.purpleAccent,
-      size: 50,
     );
   }
 }
