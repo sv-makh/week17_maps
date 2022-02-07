@@ -58,15 +58,55 @@ class _MapPageState extends State<MapPage> {
         return;
       }
     }
-    LocationData locationData = await location.getLocation();
-    _mapController.moveCamera(CameraUpdate.newLatLng(LatLng(locationData.latitude!, locationData.longitude!)));
+    LocationData initLocationData = await location.getLocation();
+    _mapController.moveCamera(CameraUpdate.newLatLng(LatLng(initLocationData.latitude!, initLocationData.longitude!)));
+  }
+
+  Future<LatLng> getCenter() async {
+    final GoogleMapController controller = await _controller.future;
+    LatLngBounds visibleRegion = await controller.getVisibleRegion();
+    LatLng centerLatLng = LatLng(
+      (visibleRegion.northeast.latitude + visibleRegion.southwest.latitude) / 2,
+      (visibleRegion.northeast.longitude + visibleRegion.southwest.longitude) / 2,
+    );
+    return centerLatLng;
   }
 
   Set<Marker> markers = {};
   Set<Polyline> polyline = {};
 
-  void _addMarker(LatLng position) {
-    if (markers.isEmpty) {
+  void _addMarker() async {
+    LocationData locationData = await location.getLocation();
+
+    markers.add(Marker(
+      markerId: const MarkerId("current location"),
+      infoWindow: const InfoWindow(title: "current location"),
+      icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+      position: LatLng(locationData.latitude!, locationData.longitude!),
+    ));
+
+    LatLng pointerLocation = await getCenter();
+
+    markers.add(Marker(
+      markerId: const MarkerId("current location"),
+      infoWindow: const InfoWindow(title: "current location"),
+      icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
+      position: pointerLocation,
+    ));
+
+    polyline.add(Polyline(
+      polylineId: const PolylineId("polyline"),
+      color: Colors.indigoAccent,
+      width: 4,
+      points: markers.map((marker) => marker.position).toList(),
+    ));
+
+    double centerLat = (locationData.latitude! + pointerLocation.latitude) / 2;
+    double centerLon = (locationData.longitude! + pointerLocation.latitude) / 2;
+
+    _mapController.moveCamera(CameraUpdate.newLatLng(LatLng(centerLat, centerLon)));
+
+    /*if (markers.isEmpty) {
       markers.add(Marker(
           markerId: const MarkerId("start"),
           infoWindow: const InfoWindow(title: "Start"),
@@ -86,7 +126,7 @@ class _MapPageState extends State<MapPage> {
         width: 4,
         points: markers.map((marker) => marker.position).toList(),
       ));
-    }
+    }*/
     setState(() {});
   }
 
@@ -121,7 +161,7 @@ class _MapPageState extends State<MapPage> {
         onMapCreated: _onMapCreated,
         markers: markers,
         polylines: polyline,
-        onTap: _addMarker,
+        //onTap: _addMarker,
         ),
         _centerPointer(context),
       ]),
@@ -139,7 +179,7 @@ class _MapPageState extends State<MapPage> {
       SizedBox(width: 15,),
       FloatingActionButton.extended(
         onPressed: () {
-
+          _addMarker();
         },
         label: const Text("Проложить"),
       )
