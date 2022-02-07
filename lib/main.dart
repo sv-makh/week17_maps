@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
@@ -15,10 +16,10 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Demo',
-      theme: ThemeData(
+      title: 'Map page',
+      /*theme: ThemeData(
         primarySwatch: Colors.blue,
-      ),
+      ),*/
       home: const MapPage()
     );
   }
@@ -72,19 +73,34 @@ class _MapPageState extends State<MapPage> {
     return centerLatLng;
   }
 
+  Future<void> _goToLatLng(LatLng latLng) async {
+    final GoogleMapController controller = await _controller.future;
+    controller.animateCamera(CameraUpdate.newCameraPosition(CameraPosition(
+        target: latLng,
+        zoom: 14
+    )));
+  }
+
+  Future<LatLng> _getLocationData() async {
+    LocationData locationData = await location.getLocation();
+    return LatLng(locationData.latitude!, locationData.longitude!);
+  }
+
   Set<Marker> markers = {};
   Set<Polyline> polyline = {};
 
   void _addMarker() async {
-    LocationData locationData = await location.getLocation();
+    _reset();
+
+    //LocationData locationData = await location.getLocation();
+    LatLng currentLocation = await _getLocationData();
 
     markers.add(Marker(
       markerId: const MarkerId("current location"),
       infoWindow: const InfoWindow(title: "current location"),
       icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
-      position: LatLng(locationData.latitude!, locationData.longitude!),
+      position: LatLng(currentLocation.latitude, currentLocation.longitude),//currentLocation,
     ));
-
     LatLng pointerLocation = await getCenter();
 
     markers.add(Marker(
@@ -94,6 +110,7 @@ class _MapPageState extends State<MapPage> {
       position: pointerLocation,
     ));
 
+    //polyline.removeWhere((element) => element.polylineId.value == "polyline");
     polyline.add(Polyline(
       polylineId: const PolylineId("polyline"),
       color: Colors.indigoAccent,
@@ -101,33 +118,35 @@ class _MapPageState extends State<MapPage> {
       points: markers.map((marker) => marker.position).toList(),
     ));
 
-    double centerLat = (locationData.latitude! + pointerLocation.latitude) / 2;
-    double centerLon = (locationData.longitude! + pointerLocation.latitude) / 2;
+    double centerLat = (currentLocation.latitude + pointerLocation.latitude) / 2;
+    double centerLon = (currentLocation.longitude + pointerLocation.longitude) / 2;
 
-    _mapController.moveCamera(CameraUpdate.newLatLng(LatLng(centerLat, centerLon)));
+    final LatLng southwest = LatLng(
+      min(currentLocation.latitude, pointerLocation.latitude),
+      min(currentLocation.longitude, pointerLocation.longitude),
+    );
+    final LatLng northeast = LatLng(
+      max(currentLocation.latitude, pointerLocation.latitude),
+      max(currentLocation.longitude, pointerLocation.longitude),
+    );
+    LatLngBounds bounds = LatLngBounds(
+      southwest: southwest,
+      northeast: northeast,
+    );
 
-    /*if (markers.isEmpty) {
-      markers.add(Marker(
-          markerId: const MarkerId("start"),
-          infoWindow: const InfoWindow(title: "Start"),
-          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
-          position: position));
-    } else {
-      markers.add(Marker(
-          markerId: const MarkerId("finish"),
-          infoWindow: const InfoWindow(title: "Finish"),
-          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
-          position: position));
+    //_goToLatLng(LatLng(centerLat, centerLon));
+    await _mapController.animateCamera(
+      CameraUpdate.newLatLngBounds(bounds, 50),
+    );
 
-      polyline.removeWhere((element) => element.polylineId.value == "polyline");
-      polyline.add(Polyline(
-        polylineId: const PolylineId("polyline"),
-        color: Colors.indigoAccent,
-        width: 4,
-        points: markers.map((marker) => marker.position).toList(),
-      ));
-    }*/
     setState(() {});
+  }
+
+  void _reset() {
+    setState(() {
+      markers.clear();
+      polyline.clear();
+    });
   }
 
   @override
@@ -163,15 +182,19 @@ class _MapPageState extends State<MapPage> {
         polylines: polyline,
         //onTap: _addMarker,
         ),
-        _centerPointer(context),
+        const Icon(
+          Icons.accessibility_new,
+          color: Colors.purpleAccent,
+          size: 50,
+        )
       ]),
     floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
     floatingActionButton: Row( children: [
       FloatingActionButton.extended(
         onPressed: () {
-          setState(() {
-            markers.clear();
-            polyline.clear();
+          _reset();
+          _getLocationData().then((latLng) {
+            _goToLatLng(latLng);
           });
         },
         label: const Text("Сброс"),
